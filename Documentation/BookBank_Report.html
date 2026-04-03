@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Book Bank Management System Documentation</title>
+<style>
+  body {
+    font-family: "Times New Roman", Times, serif;
+    line-height: 1.6;
+    margin: 40px auto;
+    max-width: 900px;
+    color: #000;
+  }
+  h1, h2, h3 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  .header {
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .file-name {
+    font-weight: bold;
+    text-decoration: underline;
+    margin-top: 30px;
+    margin-bottom: 5px;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <p>EX.NO: 6 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; IMPLEMENT THE SYSTEM AS PER THE DETAILED DESIGN</p>
+  <p>DATE:</p>
+</div>
+
+<h3><u>AIM:</u></h3>
+<p>To design and implement a web-based Book Bank Management System that enables students to browse and request library books by semester, track borrow status and return dates, while streamlining the workflow for library staff through secure data handling and efficient request processing.</p>
+
+<h3><u>Technologies Used:</u></h3>
+<ul>
+  <li><b>Node.js & Express.js</b> – Framework for building the server-side REST API application</li>
+  <li><b>React.js (Vite)</b> – For front-end user interface and client-side interactivity</li>
+  <li><b>CSS3</b> – For premium front-end user styling</li>
+  <li><b>SQLite & Prisma ORM</b> – Relational database for storing user, book logs, and application data</li>
+  <li><b>JWT (JSON Web Token)</b> – To generate secure authentication sessions across users</li>
+</ul>
+
+<h3><u>Procedure:</u></h3>
+<ol>
+  <li><b>Set up project structure</b> with folders such as <code>frontend/src/</code> and <code>backend/</code> for the application source files.</li>
+  <li><b>Design individual React components</b> for user actions like login, student request board, and staff dashboard.</li>
+  <li><b>Implement Express backend</b> with appropriate REST controllers, services, and Prisma database queries.</li>
+  <li><b>Configure database connection</b> using SQLite to manage Users, Books, Requests, and Fines schemas.</li>
+  <li><b>Implement form validations and data processing logic</b> using JavaScript and React state features.</li>
+  <li><b>Group inventory across 6 semesters</b> and systematically manage unique request mapping associating students to books and automatically calculating 14-day return dates.</li>
+  <li><b>Deploy and test the application</b> to ensure all functionalities like registration, tracking, and status updates work seamlessly.</li>
+</ol>
+
+<br><br>
+
+<h3><u>Book Bank Management System Structure:</u></h3>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+├── src/
+│   ├── backend/
+│   │   ├── index.js                # Primary Express API routing and controllers
+│   │   ├── seed.js                 # Population script for the 30-book catalog
+│   │   └── prisma/
+│   │       └── schema.prisma       # SQLite database schema mappings
+│   │
+│   └── frontend/
+│       ├── index.html              # Application entry point
+│       └── src/
+│           ├── main.jsx            # React root injection
+│           ├── App.jsx             # React router configuration
+│           ├── Login.jsx           # Handles Student & Staff login toggle logic
+│           ├── StudentDashboard.jsx# Manages book browsing and requests
+│           ├── StaffDashboard.jsx  # Manages admin request approvals
+│           └── index.css           # Premium application styling constants
+</pre>
+
+<h3><u>MAIN BACKEND CODE:</u></h3>
+
+<div class="file-name">backend/package.json</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^5.10.0",
+    "sqlite3": "^5.1.7"
+  }
+}
+</pre>
+
+<div class="file-name">backend/prisma/schema.prisma</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    // "STUDENT" or "STAFF"
+  studentRef   String?   // Optional student ID / Roll No
+  requests     Request[]
+  fines        Fine[]
+}
+
+model Book {
+  id                 String    @id @default(uuid())
+  name               String
+  author             String
+  semester           String    // e.g., "1", "2", "3", "4", "5", "6"
+  availabilityStatus String    // "AVAILABLE", "BORROWED"
+  requests           Request[]
+  fines              Fine[]
+}
+
+model Request {
+  id          String    @id @default(uuid())
+  studentId   String
+  student     User      @relation(fields: [studentId], references: [id])
+  bookId      String
+  book        Book      @relation(fields: [bookId], references: [id])
+  status      String    // "PENDING", "APPROVED", "REJECTED", "RETURNED"
+  issueDate   DateTime?
+  returnDate  DateTime?
+}
+
+model Fine {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id])
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id])
+  amount    Float
+  status    String   // "UNPAID", "PAID"
+  createdAt DateTime @default(now())
+}
+</pre>
+
+<div class="file-name">backend/index.js</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+const express = require('express');
+const cors = require('cors');
+const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const prisma = new PrismaClient();
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey12345';
+
+// --- Authentication Routes ---
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role, studentRef } = req.body;
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(400).json({ error: 'Email already in use' });
+    
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { name, email, passwordHash, role, studentRef }
+    });
+    
+    res.json({ message: 'User registered successfully!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    res.json({ token, user: { id: user.id, name: user.name, role: user.role, email: user.email } });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Middleware ---
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+  
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ error: 'Failed' });
+    req.userId = decoded.id;
+    req.userRole = decoded.role;
+    next();
+  });
+};
+
+const staffOnly = (req, res, next) => {
+  if (req.userRole !== 'STAFF') return res.status(403).json({ error: 'Staff only' });
+  next();
+};
+
+// --- Book Routes ---
+app.get('/api/books', async (req, res) => {
+  const { search, semester } = req.query;
+  const where = {};
+  if (search) {
+    where.OR = [
+      { name: { contains: search } },
+      { author: { contains: search } }
+    ];
+  }
+  if (semester) {
+    where.semester = semester;
+  }
+  const books = await prisma.book.findMany({ where });
+  res.json(books);
+});
+
+// --- Request Routes ---
+app.post('/api/requests', authMiddleware, async (req, res) => {
+  const { bookId } = req.body;
+  if (req.userRole !== 'STUDENT') return res.status(403).json({ error: 'Students only' });
+  
+  const book = await prisma.book.findUnique({ where: { id: bookId } });
+  if (book.availabilityStatus !== 'AVAILABLE') return res.status(400).json({ error: 'Unavailable' });
+
+  const request = await prisma.request.create({
+    data: { studentId: req.userId, bookId, status: 'PENDING' }
+  });
+  res.json(request);
+});
+
+app.get('/api/requests', authMiddleware, async (req, res) => {
+  if (req.userRole === 'STUDENT') {
+    const requests = await prisma.request.findMany({
+      where: { studentId: req.userId },
+      include: { book: true }
+    });
+    return res.json(requests);
+  } else {
+    const requests = await prisma.request.findMany({
+      include: { book: true, student: { select: { name: true, email: true, studentRef: true } } }
+    });
+    return res.json(requests);
+  }
+});
+
+app.put('/api/requests/:id/status', authMiddleware, staffOnly, async (req, res) => {
+  const { status } = req.body;
+  const requestId = req.params.id;
+  const request = await prisma.request.findUnique({ where: { id: requestId } });
+  
+  const updateData = { status };
+  if (status === 'APPROVED') {
+    updateData.issueDate = new Date();
+    const returnDate = new Date();
+    returnDate.setDate(returnDate.getDate() + 14);
+    updateData.returnDate = returnDate;
+    
+    await prisma.book.update({
+      where: { id: request.bookId },
+      data: { availabilityStatus: 'BORROWED' }
+    });
+  } else if (status === 'RETURNED' || status === 'REJECTED') {
+    await prisma.book.update({
+      where: { id: request.bookId },
+      data: { availabilityStatus: 'AVAILABLE' }
+    });
+  }
+  const updatedReq = await prisma.request.update({
+    where: { id: requestId },
+    data: updateData
+  });
+  res.json(updatedReq);
+});
+
+// --- Fine Routes ---
+app.get('/api/fines', authMiddleware, async (req, res) => {
+  if (req.userRole === 'STUDENT') {
+    const fines = await prisma.fine.findMany({ where: { studentId: req.userId }, include: { book: true } });
+    return res.json(fines);
+  } else {
+    const fines = await prisma.fine.findMany({ include: { book: true, student: true } });
+    return res.json(fines);
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+</pre>
+
+<br><br>
+
+<h3><u>MAIN FRONTEND CODE:</u></h3>
+
+<div class="file-name">frontend/src/App.jsx</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+import React from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import Login from './Login'
+import StudentDashboard from './StudentDashboard'
+import StaffDashboard from './StaffDashboard'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={&lt;Login /&gt;} />
+        <Route path="/student" element={&lt;StudentDashboard /&gt;} />
+        <Route path="/staff" element={&lt;StaffDashboard /&gt;} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+export default App
+</pre>
+
+<div class="file-name">frontend/src/Login.jsx</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { BookOpen, User, Lock, Briefcase } from 'lucide-react';
+
+export default function Login() {
+  const [roleMode, setRoleMode] = useState('STUDENT');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const res = await axios.post('http://127.0.0.1:5000/api/auth/login', { email, password });
+      const { user, token } = res.data;
+      if (user.role !== roleMode) {
+        setError(`Please login through the ${user.role} portal.`);
+        return;
+      }
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      if (user.role === 'STAFF') navigate('/staff');
+      else navigate('/student');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed.');
+    }
+  };
+
+  return (
+    &lt;div className="container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', marginTop: '-50px' }}&gt;
+      &lt;div className="glass-card" style={{ padding: '2.5rem', width: '100%', maxWidth: '420px' }}&gt;
+        &lt;div style={{ textAlign: 'center', marginBottom: '2rem' }}&gt;
+          &lt;BookOpen size={48} color="var(--primary-color)" style={{ marginBottom: '1rem' }} /&gt;
+          &lt;h2&gt;Book Bank Portal&lt;/h2&gt;
+        &lt;/div&gt;
+
+        &lt;div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', marginBottom: '1.5rem' }}&gt;
+          &lt;button type="button" onClick={() =&gt; { setRoleMode('STUDENT'); setEmail('student@school.edu'); setPassword('studentpass'); }} style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: roleMode === 'STUDENT' ? 'var(--primary-color)' : 'transparent', color: roleMode === 'STUDENT' ? 'white' : 'var(--text-secondary)' }}&gt;
+            Student
+          &lt;/button&gt;
+          &lt;button type="button" onClick={() =&gt; { setRoleMode('STAFF'); setEmail('admin@bookbank.com'); setPassword('staffpass'); }} style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: roleMode === 'STAFF' ? 'var(--primary-color)' : 'transparent', color: roleMode === 'STAFF' ? 'white' : 'var(--text-secondary)' }}&gt;
+            Staff
+          &lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;form onSubmit={handleLogin}&gt;
+          &lt;div className="input-group"&gt;
+            &lt;label className="input-label"&gt;Email&lt;/label&gt;
+            &lt;input type="email" required className="input-field" value={email} onChange={(e) =&gt; setEmail(e.target.value)} /&gt;
+          &lt;/div&gt;
+          &lt;div className="input-group"&gt;
+            &lt;label className="input-label"&gt;Password&lt;/label&gt;
+            &lt;input type="password" required className="input-field" value={password} onChange={(e) =&gt; setPassword(e.target.value)} /&gt;
+          &lt;/div&gt;
+          &lt;button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem', padding: '0.75rem' }}&gt;
+            Login
+          &lt;/button&gt;
+        &lt;/form&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+</pre>
+
+<div class="file-name">frontend/src/StudentDashboard.jsx</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+import React, { useState, useEffect } from 'react';
+import { Book, Clock, AlertCircle, Search, LogOut, CalendarCheck, BookUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+export default function StudentDashboard() {
+  const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [availableBooks, setAvailableBooks] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [fines, setFines] = useState([]);
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  useEffect(() => {
+    if (!user.id || user.role !== 'STUDENT') navigate('/');
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [resBooks, resRequests, resFines] = await Promise.all([
+        axios.get('http://127.0.0.1:5000/api/books', { headers }),
+        axios.get('http://127.0.0.1:5000/api/requests', { headers }),
+        axios.get('http://127.0.0.1:5000/api/fines', { headers })
+      ]);
+      setAvailableBooks(resBooks.data);
+      setRequests(resRequests.data);
+      setFines(resFines.data);
+    } catch(e) { /* Error Handling */ }
+  };
+
+  const handleRequest = async (bookId) => {
+    try {
+      await axios.post('http://127.0.0.1:5000/api/requests', { bookId }, { headers });
+      fetchData();
+    } catch (e) {
+      alert("Error requesting book");
+    }
+  };
+
+  const filteredBooks = availableBooks.filter(b => 
+    b.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    b.semester.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  const approvedRequests = requests.filter(r => r.status === 'APPROVED');
+
+  return (
+    &lt;div className="container"&gt;
+      &lt;h2&gt;Student Portal - Demanding Books&lt;/h2&gt;
+      
+      {/* Approved Books */}
+      {approvedRequests.length &gt; 0 && (
+        &lt;div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}&gt;
+          &lt;h3&gt;Currently Borrowed Books&lt;/h3&gt;
+          {approvedRequests.map(req =&gt; (
+            &lt;div key={req.id} className="glass-card" style={{ padding: '1rem' }}&gt;
+              &lt;h4&gt;{req.book.name}&lt;/h4&gt;
+              &lt;p&gt;Return Due: {new Date(req.returnDate).toLocaleDateString()}&lt;/p&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      )}
+
+      &lt;div className="glass-panel" style={{ padding: '2rem' }}&gt;
+        &lt;h3&gt;Available Books&lt;/h3&gt;
+        &lt;input type="text" placeholder="Search..." onChange={(e) =&gt; setSearchTerm(e.target.value)} className="input-field" /&gt;
+        &lt;div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}&gt;
+          {filteredBooks.map(book =&gt; {
+             const alreadyRequested = requests.find(r =&gt; r.bookId === book.id && (r.status === 'PENDING' || r.status === 'APPROVED'));
+             return (
+              &lt;div key={book.id} className="glass-card" style={{ padding: '1.25rem' }}&gt;
+                &lt;div&gt;Semester {book.semester}&lt;/div&gt;
+                &lt;h4&gt;{book.name}&lt;/h4&gt;
+                &lt;button className="btn btn-primary" disabled={alreadyRequested} onClick={() =&gt; handleRequest(book.id)}&gt;
+                  {alreadyRequested ? 'Requested' : 'Request Book'}
+                &lt;/button&gt;
+              &lt;/div&gt;
+             );
+          })}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+</pre>
+
+
+<div class="file-name">frontend/src/StaffDashboard.jsx</div>
+<pre style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 15px; font-family: 'Courier New', Courier, monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word;">
+import React, { useState, useEffect } from 'react';
+import { Users, ClipboardList, LogOut, CheckCircle, XCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+export default function StaffDashboard() {
+  const navigate = useNavigate();
+  const [requests, setRequests] = useState([]);
+  const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    const resRequests = await axios.get('http://127.0.0.1:5000/api/requests', { headers });
+    setRequests(resRequests.data);
+  };
+
+  const handleStatusChange = async (id, status) => {
+    await axios.put(`http://127.0.0.1:5000/api/requests/${id}/status`, { status }, { headers });
+    fetchData();
+  };
+
+  return (
+    &lt;div className="container"&gt;
+      &lt;h2&gt;Staff Portal&lt;/h2&gt;
+      &lt;div className="glass-panel" style={{ padding: '2rem' }}&gt;
+        &lt;table style={{ width: '100%', borderCollapse: 'collapse' }}&gt;
+          &lt;thead&gt;
+            &lt;tr&gt;
+              &lt;th&gt;Student Details&lt;/th&gt;
+              &lt;th&gt;Book Requested&lt;/th&gt;
+              &lt;th&gt;Status&lt;/th&gt;
+              &lt;th&gt;Action&lt;/th&gt;
+            &lt;/tr&gt;
+          &lt;/thead&gt;
+          &lt;tbody&gt;
+            {requests.map(req =&gt; (
+              &lt;tr key={req.id}&gt;
+                &lt;td&gt;{req.student.name}&lt;/td&gt;
+                &lt;td&gt;{req.book.name} (Sem {req.book.semester})&lt;/td&gt;
+                &lt;td&gt;{req.status}&lt;/td&gt;
+                &lt;td&gt;
+                  {req.status === 'PENDING' ? (
+                    &lt;&gt;
+                      &lt;button onClick={() =&gt; handleStatusChange(req.id, 'APPROVED')}&gt;Approve&lt;/button&gt;
+                      &lt;button onClick={() =&gt; handleStatusChange(req.id, 'REJECTED')}&gt;Reject&lt;/button&gt;
+                    &lt;/&gt;
+                  ) : req.status === 'APPROVED' ? (
+                    &lt;button onClick={() =&gt; handleStatusChange(req.id, 'RETURNED')}&gt;Return&lt;/button&gt;
+                  ) : null}
+                &lt;/td&gt;
+              &lt;/tr&gt;
+            ))}
+          &lt;/tbody&gt;
+        &lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+</pre>
+
+<br/>
+<br/>
+
+<h3><u>OUTPUT SCREENSHOTS:</u></h3>
+
+<p><b>Login Authentication Page</b></p>
+<img src="1_login.png" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; margin-bottom: 2rem;" />
+
+<p><b>Student Dashboard - Browsing & Requests</b></p>
+<img src="2_student_search.png" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; margin-bottom: 2rem;" />
+
+<p><b>Student Dashboard - Return Date Visible Automatically After Approval</b></p>
+<img src="6_student_due_date.png" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; margin-bottom: 2rem;" />
+
+<p><b>Staff/Admin Portal - Approving Books & Logs</b></p>
+<img src="4_staff_approval.png" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; margin-bottom: 2rem;" />
+
+
+
+<br/>
+<h3><u>RESULT:</u></h3>
+<p style="text-indent: 40px; font-weight: bold;">
+Thus, the design and implementation of a web-based Book Bank Management System that enables users to browse books across semesters, submit library requests, dynamically check application status, and automatically receive calculated return dates have been fully coded, integrated, and verified to run perfectly.
+</p>
+
+</body>
+</html>

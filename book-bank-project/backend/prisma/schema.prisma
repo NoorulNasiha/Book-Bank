@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    // "STUDENT" or "STAFF"
+  studentRef   String?   // Optional student ID / Roll No
+  requests     Request[]
+  fines        Fine[]
+}
+
+model Book {
+  id                 String    @id @default(uuid())
+  name               String
+  author             String
+  semester           String    // e.g., "C", "C++", "Java", "OS"
+  availabilityStatus String    // "AVAILABLE", "BORROWED"
+  requests           Request[]
+  fines              Fine[]
+}
+
+model Request {
+  id          String    @id @default(uuid())
+  studentId   String
+  student     User      @relation(fields: [studentId], references: [id])
+  bookId      String
+  book        Book      @relation(fields: [bookId], references: [id])
+  status      String    // "PENDING", "APPROVED", "REJECTED", "RETURNED"
+  issueDate   DateTime?
+  returnDate  DateTime?
+}
+
+model Fine {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id])
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id])
+  amount    Float
+  status    String   // "UNPAID", "PAID"
+  createdAt DateTime @default(now())
+}
